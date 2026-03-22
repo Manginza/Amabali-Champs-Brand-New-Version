@@ -64,8 +64,18 @@ export function calcEarnings(wordCount: number): number {
   return wordCount * RATE_PER_WORD
 }
 
+// Alias for calcEarnings (used by components)
+export function calculateEarnings(wordCount: number): number {
+  return calcEarnings(wordCount)
+}
+
 export function formatRands(cents: number): string {
   return `R${(cents / 100).toFixed(2)}`
+}
+
+// Alias for formatRands (used by components)
+export function formatCurrency(cents: number): string {
+  return formatRands(cents)
 }
 
 export function getMilestone(wordCount: number) {
