@@ -1,7 +1,15 @@
 -- Amabali Champs Reading Gym Database Schema
 
+-- Drop existing objects if they exist (for clean slate)
+drop view if exists public.leaderboard;
+drop table if exists public.book_reviews;
+drop table if exists public.reading_sessions;
+drop table if exists public.profiles;
+drop trigger if exists on_auth_user_created on auth.users;
+drop function if exists public.handle_new_user();
+
 -- Profiles table (linked to auth.users)
-create table if not exists public.profiles (
+create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text,
   avatar_emoji text default '📚',
@@ -33,14 +41,13 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row
   execute function public.handle_new_user();
 
 -- Reading sessions table
-create table if not exists public.reading_sessions (
+create table public.reading_sessions (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
@@ -58,7 +65,7 @@ create policy "sessions_insert_auth" on public.reading_sessions for insert with 
 create policy "sessions_update_own" on public.reading_sessions for update using (auth.uid() = created_by);
 
 -- Book reviews table
-create table if not exists public.book_reviews (
+create table public.book_reviews (
   id uuid primary key default gen_random_uuid(),
   session_id uuid references public.reading_sessions(id) on delete cascade,
   learner_id uuid not null references auth.users(id) on delete cascade,
@@ -81,12 +88,12 @@ create policy "reviews_update_own" on public.book_reviews for update using (auth
 create policy "reviews_delete_own" on public.book_reviews for delete using (auth.uid() = learner_id);
 
 -- Indexes for performance
-create index if not exists idx_reviews_session_id on public.book_reviews(session_id);
-create index if not exists idx_reviews_learner_id on public.book_reviews(learner_id);
-create index if not exists idx_reviews_submitted_at on public.book_reviews(submitted_at desc);
+create index idx_reviews_session_id on public.book_reviews(session_id);
+create index idx_reviews_learner_id on public.book_reviews(learner_id);
+create index idx_reviews_submitted_at on public.book_reviews(submitted_at desc);
 
 -- Leaderboard view for efficient queries
-create or replace view public.leaderboard as
+create view public.leaderboard as
 select
   r.learner_id,
   r.learner_name,
