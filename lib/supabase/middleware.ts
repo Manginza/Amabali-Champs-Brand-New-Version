@@ -29,20 +29,8 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // Protect the gym and dashboard routes
-  if (
-    (request.nextUrl.pathname.startsWith('/gym') ||
-      request.nextUrl.pathname.startsWith('/dashboard')) &&
-    !user
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
-  }
+  // No auth protection needed - learners can use the app without accounts
+  await supabase.auth.getUser()
 
   return supabaseResponse
 }

@@ -110,14 +110,14 @@ export function getMilestone(wordCount: number) {
   return [...MILESTONES].reverse().find(m => wordCount >= m.words) || null
 }
 
-// Generate a session ID from browser fingerprint
+// Generate a unique session ID for tracking user actions without login
 export function generateSessionId(): string {
-  if (typeof window === 'undefined') return ''
+  if (typeof window === 'undefined') return 'server-session'
   
   const stored = sessionStorage.getItem('amabali_session_id')
   if (stored) return stored
   
-  const id = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  const id = `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
   sessionStorage.setItem('amabali_session_id', id)
   return id
 }
