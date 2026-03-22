@@ -15,22 +15,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Star, Coins, Sparkles } from "lucide-react";
-import { calculateEarnings, formatCurrency } from "@/lib/reading-gym";
+import {
+  calculateEarnings,
+  formatCurrency,
+  generateSessionId,
+  LANGUAGE_OPTIONS,
+  SCHOOL_OPTIONS,
+  GRADE_OPTIONS,
+} from "@/lib/reading-gym";
 import confetti from "canvas-confetti";
 
 interface ReviewFormProps {
-  sessionId: string | null;
-  userId: string;
-  userName: string;
   onReviewSubmitted?: () => void;
 }
 
-export function ReviewForm({
-  sessionId,
-  userId,
-  userName,
-  onReviewSubmitted,
-}: ReviewFormProps) {
+export function ReviewForm({ onReviewSubmitted }: ReviewFormProps) {
+  const [studentName, setStudentName] = useState("");
+  const [school, setSchool] = useState("");
+  const [grade, setGrade] = useState<number | "">("");
+  const [language, setLanguage] = useState("English");
   const [bookTitle, setBookTitle] = useState("");
   const [bookAuthor, setBookAuthor] = useState("");
   const [starRating, setStarRating] = useState(3);
@@ -38,6 +41,11 @@ export function ReviewForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [wordCount, setWordCount] = useState(0);
   const [estimatedEarnings, setEstimatedEarnings] = useState(0);
+  const [sessionId, setSessionId] = useState("");
+
+  useEffect(() => {
+    setSessionId(generateSessionId());
+  }, []);
 
   const countWords = useCallback((text: string) => {
     return text
@@ -63,13 +71,14 @@ export function ReviewForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sessionId) {
-      toast.error("No active session. Please wait for a session to start.");
-      return;
-    }
 
     if (wordCount < 10) {
       toast.error("Please write at least 10 words in your review.");
+      return;
+    }
+
+    if (!studentName.trim()) {
+      toast.error("Please enter your name.");
       return;
     }
 
@@ -77,19 +86,29 @@ export function ReviewForm({
     const supabase = createClient();
 
     try {
-      const { error } = await supabase.from("reading_gym_reviews").insert({
+      const { error } = await supabase.from("book_reviews").insert({
         session_id: sessionId,
-        learner_id: userId,
-        learner_name: userName,
-        book_title: bookTitle,
-        book_author: bookAuthor || null,
+        book_title: bookTitle.trim(),
+        book_author: bookAuthor.trim() || null,
+        student_name: studentName.trim(),
+        school: school || null,
+        grade: grade || null,
+        language: language,
+        content: reviewText.trim(),
         star_rating: starRating,
-        review_text: reviewText,
         word_count: wordCount,
         earnings_cents: estimatedEarnings,
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505") {
+          toast.error(
+            "You have already submitted a review for this book. Try reviewing a different book!"
+          );
+          return;
+        }
+        throw error;
+      }
 
       triggerConfetti();
       toast.success(
@@ -99,7 +118,7 @@ export function ReviewForm({
         }
       );
 
-      // Reset form
+      // Reset form (keep student details)
       setBookTitle("");
       setBookAuthor("");
       setStarRating(3);
@@ -128,9 +147,76 @@ export function ReviewForm({
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Student Info Section */}
+          <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+            <h3 className="font-medium text-foreground">Your Details</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="studentName">Your Name *</Label>
+                <Input
+                  id="studentName"
+                  placeholder="Enter your name"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="school">School</Label>
+                <select
+                  id="school"
+                  value={school}
+                  onChange={(e) => setSchool(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                  <option value="">Select your school</option>
+                  {SCHOOL_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="grade">Grade</Label>
+                <select
+                  id="grade"
+                  value={grade}
+                  onChange={(e) =>
+                    setGrade(e.target.value ? Number(e.target.value) : "")
+                  }
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                  <option value="">Select your grade</option>
+                  {GRADE_OPTIONS.map((g) => (
+                    <option key={g} value={g}>
+                      Grade {g}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="language">Language</Label>
+                <select
+                  id="language"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                  {LANGUAGE_OPTIONS.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Book Info Section */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="bookTitle">Book Title</Label>
+              <Label htmlFor="bookTitle">Book Title *</Label>
               <Input
                 id="bookTitle"
                 placeholder="Enter the book title"
@@ -159,6 +245,7 @@ export function ReviewForm({
                   type="button"
                   onClick={() => setStarRating(rating)}
                   className="rounded p-1 transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary"
+                  aria-label={`Rate ${rating} stars`}
                 >
                   <Star
                     className={`h-8 w-8 ${
@@ -174,7 +261,7 @@ export function ReviewForm({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="reviewText">Your Review</Label>
+              <Label htmlFor="reviewText">Your Review *</Label>
               <span className="text-sm text-muted-foreground">
                 {wordCount} words
               </span>
@@ -204,16 +291,10 @@ export function ReviewForm({
             type="submit"
             className="w-full"
             size="lg"
-            disabled={isSubmitting || !sessionId || wordCount < 10}
+            disabled={isSubmitting || wordCount < 10 || !studentName.trim()}
           >
             {isSubmitting ? "Submitting..." : "Submit Review & Earn!"}
           </Button>
-
-          {!sessionId && (
-            <p className="text-center text-sm text-muted-foreground">
-              Waiting for an active reading session...
-            </p>
-          )}
         </form>
       </CardContent>
     </Card>

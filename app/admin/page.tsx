@@ -11,44 +11,42 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
   BookOpen,
   ArrowLeft,
-  Play,
-  Square,
-  Clock,
   Users,
   FileText,
+  Coins,
+  Star,
+  RefreshCw,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import { formatCurrency, BookReview, LeaderboardEntry } from "@/lib/reading-gym";
 
-interface Session {
-  id: string;
-  session_name: string;
-  end_time?: string;
-  is_active: boolean;
-  created_at: string;
-}
-
-interface SessionStats {
-  reviewCount: number;
-  participantCount: number;
+interface Stats {
+  totalReviews: number;
+  totalStudents: number;
   totalWords: number;
   totalEarnings: number;
+  avgRating: number;
 }
 
 export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [sessionStats, setSessionStats] = useState<Record<string, SessionStats>>({});
-  const [newSessionName, setNewSessionName] = useState("");
+  const [stats, setStats] = useState<Stats>({
+    totalReviews: 0,
+    totalStudents: 0,
+    totalWords: 0,
+    totalEarnings: 0,
+    avgRating: 0,
+  });
+  const [recentReviews, setRecentReviews] = useState<BookReview[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -64,123 +62,77 @@ export default function AdminPage() {
       }
 
       setUser(user);
-      await fetchSessions();
+      await fetchData();
       setIsLoading(false);
     };
 
     init();
   }, [router]);
 
-  const fetchSessions = async () => {
-    const supabase = createClient();
-    const { data: sessionsData } = await supabase
-      .from("reading_gym_sessions")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (sessionsData) {
-      setSessions(sessionsData);
-
-      // Fetch stats for each session
-      const stats: Record<string, SessionStats> = {};
-      for (const session of sessionsData) {
-        const { data: reviews } = await supabase
-          .from("reading_gym_reviews")
-          .select("learner_id, word_count, earnings_cents")
-          .eq("session_id", session.id);
-
-        if (reviews) {
-          const uniqueParticipants = new Set(reviews.map((r) => r.learner_id));
-          stats[session.id] = {
-            reviewCount: reviews.length,
-            participantCount: uniqueParticipants.size,
-            totalWords: reviews.reduce((sum, r) => sum + r.word_count, 0),
-            totalEarnings: reviews.reduce((sum, r) => sum + r.earnings_cents, 0),
-          };
-        } else {
-          stats[session.id] = {
-            reviewCount: 0,
-            participantCount: 0,
-            totalWords: 0,
-            totalEarnings: 0,
-          };
-        }
-      }
-      setSessionStats(stats);
-    }
-  };
-
-  const handleCreateSession = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !newSessionName.trim()) return;
-
-    setIsCreating(true);
+  const fetchData = async () => {
     const supabase = createClient();
 
-    try {
-      // First, deactivate any existing active sessions
-      await supabase
-        .from("reading_gym_sessions")
-        .update({ is_active: false, end_time: new Date().toISOString() })
-        .eq("is_active", true);
+    // Fetch stats
+    const { data: reviews } = await supabase
+      .from("book_reviews")
+      .select("student_name, word_count, earnings_cents, avg_external_rating")
+      .eq("is_approved", true);
 
-      // Create new session
-      const { error } = await supabase.from("reading_gym_sessions").insert({
-        session_name: newSessionName.trim(),
-        is_active: true,
-        created_by: user.id,
+    if (reviews) {
+      const uniqueStudents = new Set(reviews.map((r) => r.student_name.toLowerCase().trim()));
+      const totalRating = reviews.reduce((sum, r) => sum + (r.avg_external_rating || 0), 0);
+      const avgRating = reviews.length > 0 ? totalRating / reviews.length : 0;
+
+      setStats({
+        totalReviews: reviews.length,
+        totalStudents: uniqueStudents.size,
+        totalWords: reviews.reduce((sum, r) => sum + r.word_count, 0),
+        totalEarnings: reviews.reduce((sum, r) => sum + r.earnings_cents, 0),
+        avgRating,
       });
+    }
 
-      if (error) throw error;
+    // Fetch recent reviews
+    const { data: recentData } = await supabase
+      .from("book_reviews")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(10);
 
-      toast.success("Reading session started!");
-      setNewSessionName("");
-      await fetchSessions();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create session"
-      );
-    } finally {
-      setIsCreating(false);
+    if (recentData) {
+      setRecentReviews(recentData);
+    }
+
+    // Fetch leaderboard
+    const { data: leaderboardData, error: rpcError } = await supabase.rpc("get_student_leaderboard");
+
+    if (!rpcError && leaderboardData) {
+      setLeaderboard(leaderboardData.slice(0, 10));
     }
   };
 
-  const handleToggleSession = async (session: Session) => {
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchData();
+    toast.success("Data refreshed");
+    setIsRefreshing(false);
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!confirm("Are you sure you want to delete this review?")) return;
+
     const supabase = createClient();
+    const { error } = await supabase
+      .from("book_reviews")
+      .delete()
+      .eq("id", reviewId);
 
-    try {
-      if (session.is_active) {
-        // End session
-        await supabase
-          .from("reading_gym_sessions")
-          .update({ is_active: false, end_time: new Date().toISOString() })
-          .eq("id", session.id);
-        toast.success("Session ended");
-      } else {
-        // Deactivate other sessions first
-        await supabase
-          .from("reading_gym_sessions")
-          .update({ is_active: false, end_time: new Date().toISOString() })
-          .eq("is_active", true);
-
-        // Reactivate this session
-        await supabase
-          .from("reading_gym_sessions")
-          .update({ is_active: true, end_time: null })
-          .eq("id", session.id);
-        toast.success("Session reactivated");
-      }
-
-      await fetchSessions();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update session"
-      );
+    if (error) {
+      toast.error("Failed to delete review");
+    } else {
+      toast.success("Review deleted");
+      await fetchData();
     }
-  };
-
-  const formatCurrency = (cents: number) => {
-    return `R${(cents / 100).toFixed(2)}`;
   };
 
   if (isLoading) {
@@ -210,188 +162,191 @@ export default function AdminPage() {
                 <BookOpen className="h-5 w-5" />
               </div>
               <span className="font-display text-lg font-bold">
-                Session Manager
+                Admin Dashboard
               </span>
             </div>
           </div>
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
-        <div className="mb-8 grid gap-6 lg:grid-cols-2">
-          {/* Create Session Card */}
-          <Card className="border-2 border-primary/20">
-            <CardHeader>
-              <CardTitle className="font-display">Start New Session</CardTitle>
-              <CardDescription>
-                Create a new reading session for learners to submit reviews
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleCreateSession} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="sessionName">Session Name</Label>
-                  <Input
-                    id="sessionName"
-                    placeholder="e.g., Morning Reading Club"
-                    value={newSessionName}
-                    onChange={(e) => setNewSessionName(e.target.value)}
-                    required
-                  />
+        {/* Stats Overview */}
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <FileText className="h-5 w-5 text-primary" />
                 </div>
-                
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isCreating || !newSessionName.trim()}
-                >
-                  <Play className="mr-2 h-4 w-4" />
-                  {isCreating ? "Starting..." : "Start Session"}
-                </Button>
-              </form>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Reviews</p>
+                  <p className="font-display text-2xl font-bold">{stats.totalReviews}</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Active Session Info */}
           <Card>
-            <CardHeader>
-              <CardTitle className="font-display">Quick Stats</CardTitle>
-              <CardDescription>Overview of all sessions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-lg bg-primary/10 p-4 text-center">
-                  <p className="font-display text-3xl font-bold text-primary">
-                    {sessions.length}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Total Sessions</p>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-accent/10 p-2">
+                  <Users className="h-5 w-5 text-accent" />
                 </div>
-                <div className="rounded-lg bg-accent/10 p-4 text-center">
-                  <p className="font-display text-3xl font-bold text-accent">
-                    {sessions.filter((s) => s.is_active).length}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Active</p>
+                <div>
+                  <p className="text-xs text-muted-foreground">Students</p>
+                  <p className="font-display text-2xl font-bold">{stats.totalStudents}</p>
                 </div>
-                <div className="rounded-lg bg-blue-500/10 p-4 text-center">
-                  <p className="font-display text-3xl font-bold text-blue-500">
-                    {Object.values(sessionStats).reduce(
-                      (sum, s) => sum + s.reviewCount,
-                      0
-                    )}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Total Reviews</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-blue-500/10 p-2">
+                  <BookOpen className="h-5 w-5 text-blue-500" />
                 </div>
-                <div className="rounded-lg bg-purple-500/10 p-4 text-center">
-                  <p className="font-display text-3xl font-bold text-purple-500">
-                    {formatCurrency(
-                      Object.values(sessionStats).reduce(
-                        (sum, s) => sum + s.totalEarnings,
-                        0
-                      )
-                    )}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Total Earnings</p>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Words</p>
+                  <p className="font-display text-2xl font-bold">{stats.totalWords.toLocaleString()}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-yellow-500/10 p-2">
+                  <Coins className="h-5 w-5 text-yellow-500" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total Earnings</p>
+                  <p className="font-display text-2xl font-bold">{formatCurrency(stats.totalEarnings)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-purple-500/10 p-2">
+                  <Star className="h-5 w-5 text-purple-500" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Avg Rating</p>
+                  <p className="font-display text-2xl font-bold">{stats.avgRating.toFixed(1)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Sessions List */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display">All Sessions</CardTitle>
-            <CardDescription>Manage your reading sessions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {sessions.length === 0 ? (
-              <div className="py-8 text-center">
-                <p className="text-muted-foreground">
-                  No sessions yet. Create your first session above!
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {sessions.map((session) => {
-                  const stats = sessionStats[session.id] || {
-                    reviewCount: 0,
-                    participantCount: 0,
-                    totalWords: 0,
-                    totalEarnings: 0,
-                  };
-
-                  return (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Leaderboard */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display">Quality Leaderboard</CardTitle>
+              <CardDescription>Top students by weighted quality score</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {leaderboard.length === 0 ? (
+                <p className="py-8 text-center text-muted-foreground">No data yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {leaderboard.map((entry, index) => (
                     <div
-                      key={session.id}
-                      className={`rounded-lg border p-4 transition-colors ${
-                        session.is_active
-                          ? "border-primary bg-primary/5"
-                          : "bg-muted/30"
+                      key={entry.student_name + index}
+                      className={`flex items-center gap-3 rounded-lg p-3 ${
+                        index === 0 ? "bg-yellow-50 dark:bg-yellow-900/20" : "bg-muted/30"
                       }`}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-display font-semibold">
-                              {session.session_name}
-                            </h3>
-                            {session.is_active && (
-                              <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
-                                Active
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {new Date(session.created_at).toLocaleDateString()}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              {stats.participantCount} participants
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <FileText className="h-3 w-3" />
-                              {stats.reviewCount} reviews
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="font-display text-lg font-bold text-primary">
-                              {formatCurrency(stats.totalEarnings)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {stats.totalWords.toLocaleString()} words
-                            </p>
-                          </div>
-                          <Button
-                            variant={session.is_active ? "destructive" : "outline"}
-                            size="sm"
-                            onClick={() => handleToggleSession(session)}
-                          >
-                            {session.is_active ? (
-                              <>
-                                <Square className="mr-1 h-3 w-3" />
-                                End
-                              </>
-                            ) : (
-                              <>
-                                <Play className="mr-1 h-3 w-3" />
-                                Start
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{entry.student_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {entry.school || "Unknown school"} {entry.grade ? `Grade ${entry.grade}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="flex items-center gap-1 text-sm">
+                          <Star className="h-3 w-3 fill-accent text-accent" />
+                          {entry.avg_rating.toFixed(1)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {entry.review_count} reviews
+                        </p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent Reviews */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="font-display">Recent Reviews</CardTitle>
+              <CardDescription>Latest submitted reviews</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recentReviews.length === 0 ? (
+                <p className="py-8 text-center text-muted-foreground">No reviews yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {recentReviews.map((review) => (
+                    <div
+                      key={review.id}
+                      className="rounded-lg border bg-card p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium">{review.student_name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {review.book_title}
+                          </p>
+                          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{review.word_count} words</span>
+                            <span>{formatCurrency(review.earnings_cents)}</span>
+                            <span className="flex items-center gap-0.5">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  className={`h-3 w-3 ${
+                                    s <= review.star_rating
+                                      ? "fill-accent text-accent"
+                                      : "fill-muted text-muted"
+                                  }`}
+                                />
+                              ))}
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteReview(review.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );

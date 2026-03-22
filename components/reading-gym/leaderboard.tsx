@@ -9,64 +9,70 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Trophy, Medal, Award, TrendingUp } from "lucide-react";
-import { formatCurrency } from "@/lib/reading-gym";
-
-interface LeaderboardEntry {
-  learner_id: string;
-  learner_name: string;
-  avatar_emoji: string;
-  review_count: number;
-  total_words: number;
-  total_earnings: number;
-}
+import { Trophy, Medal, Award, TrendingUp, Star } from "lucide-react";
+import { formatCurrency, LeaderboardEntry } from "@/lib/reading-gym";
 
 interface LeaderboardProps {
-  sessionId: string | null;
   refreshTrigger?: number;
 }
 
-export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
+export function Leaderboard({ refreshTrigger }: LeaderboardProps) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!sessionId) {
-      setEntries([]);
-      setIsLoading(false);
-      return;
-    }
-
     const fetchLeaderboard = async () => {
       const supabase = createClient();
+      
+      // Try the RPC function first
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_student_leaderboard');
+      
+      if (!rpcError && rpcData) {
+        setEntries(rpcData.slice(0, 10));
+        setIsLoading(false);
+        return;
+      }
+      
+      // Fallback to manual aggregation
       const { data, error } = await supabase
-        .from("reading_gym_reviews")
-        .select("learner_id, learner_name, avatar_emoji, word_count, earnings_cents")
-        .eq("session_id", sessionId)
+        .from("book_reviews")
+        .select("student_name, school, grade, language, word_count, earnings_cents, avg_external_rating, external_rating_count")
         .eq("is_approved", true);
 
       if (!error && data) {
-        // Aggregate by learner
         const leaderboardMap = new Map<string, LeaderboardEntry>();
         for (const review of data) {
-          const existing = leaderboardMap.get(review.learner_id);
+          const key = review.student_name.toLowerCase().trim();
+          const existing = leaderboardMap.get(key);
           if (existing) {
             existing.review_count++;
             existing.total_words += review.word_count;
-            existing.total_earnings += review.earnings_cents;
+            existing.earnings_cents += review.earnings_cents;
+            const totalCount = existing.review_count;
+            existing.avg_rating = ((existing.avg_rating * (totalCount - 1)) + (review.avg_external_rating || 0)) / totalCount;
           } else {
-            leaderboardMap.set(review.learner_id, {
-              learner_id: review.learner_id,
-              learner_name: review.learner_name,
-              avatar_emoji: review.avatar_emoji,
+            leaderboardMap.set(key, {
+              student_name: review.student_name,
+              school: review.school,
+              grade: review.grade,
+              language: review.language,
               review_count: 1,
               total_words: review.word_count,
-              total_earnings: review.earnings_cents,
+              earnings_cents: review.earnings_cents,
+              avg_rating: review.avg_external_rating || 0,
+              quality_score: 0,
             });
           }
         }
-        const sorted = Array.from(leaderboardMap.values())
-          .sort((a, b) => b.total_earnings - a.total_earnings)
+        
+        // Calculate quality scores
+        const entriesArray = Array.from(leaderboardMap.values());
+        for (const entry of entriesArray) {
+          entry.quality_score = entry.avg_rating * 0.7 + Math.min(entry.review_count / 10, 1) * 5 * 0.3;
+        }
+        
+        const sorted = entriesArray
+          .sort((a, b) => b.quality_score - a.quality_score || b.avg_rating - a.avg_rating || b.earnings_cents - a.earnings_cents)
           .slice(0, 10);
         setEntries(sorted);
       }
@@ -84,8 +90,7 @@ export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
         {
           event: "*",
           schema: "public",
-          table: "reading_gym_reviews",
-          filter: `session_id=eq.${sessionId}`,
+          table: "book_reviews",
         },
         () => {
           fetchLeaderboard();
@@ -96,7 +101,7 @@ export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [sessionId, refreshTrigger]);
+  }, [refreshTrigger]);
 
   const getRankIcon = (index: number) => {
     switch (index) {
@@ -120,9 +125,11 @@ export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
       <CardHeader className="space-y-1">
         <CardTitle className="flex items-center gap-2 font-display text-xl">
           <TrendingUp className="h-5 w-5 text-primary" />
-          Live Leaderboard
+          Quality Leaderboard
         </CardTitle>
-        <CardDescription>Top readers in this session</CardDescription>
+        <CardDescription>
+          Ranked by quality score (70% reader ratings + 30% engagement)
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -143,16 +150,14 @@ export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
         ) : entries.length === 0 ? (
           <div className="py-8 text-center">
             <p className="text-muted-foreground">
-              {sessionId
-                ? "No reviews yet. Be the first!"
-                : "Waiting for a session to start..."}
+              No reviews yet. Be the first to submit a review!
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             {entries.map((entry, index) => (
               <div
-                key={entry.learner_id}
+                key={entry.student_name + index}
                 className={`flex items-center gap-3 rounded-lg p-3 transition-colors ${
                   index === 0
                     ? "bg-yellow-50 dark:bg-yellow-900/20"
@@ -160,19 +165,24 @@ export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
                 }`}
               >
                 <div className="flex-shrink-0">{getRankIcon(index)}</div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-xl">
-                  {entry.avatar_emoji || "📚"}
-                </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{entry.learner_name}</p>
+                  <p className="truncate font-medium">{entry.student_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {entry.review_count} review{entry.review_count !== 1 && "s"}{" "}
-                    &middot; {entry.total_words} words
+                    {entry.school && `${entry.school} `}
+                    {entry.grade && `Grade ${entry.grade}`}
+                    {!entry.school && !entry.grade && `${entry.review_count} review${entry.review_count !== 1 ? "s" : ""}`}
                   </p>
+                </div>
+                <div className="flex items-center gap-1 text-sm">
+                  <Star className="h-4 w-4 fill-accent text-accent" />
+                  <span className="font-medium">{entry.avg_rating.toFixed(1)}</span>
                 </div>
                 <div className="text-right">
                   <p className="font-display font-bold text-primary">
-                    {formatCurrency(entry.total_earnings)}
+                    {formatCurrency(entry.earnings_cents)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {entry.total_words} words
                   </p>
                 </div>
               </div>
