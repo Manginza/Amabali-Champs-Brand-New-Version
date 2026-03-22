@@ -14,13 +14,13 @@ const fredoka = Fredoka({
 });
 
 export const metadata: Metadata = {
-  title: "Amabali Champs - Reading Gym",
+  title: "SRDL Writers & Reader's Hub",
   description:
-    "Write book reviews, earn money per word, and compete on the live leaderboard. The Reading Gym makes reading and writing fun and rewarding!",
-  keywords: ["reading", "book reviews", "education", "literacy", "gamification"],
+    "Unleash your creativity, write amazing stories, and earn rewards while improving your skills!",
+  keywords: ["reading", "writing", "stories", "reviews", "education", "literacy"],
   openGraph: {
-    title: "Amabali Champs - Reading Gym",
-    description: "Write book reviews, earn money, and climb the leaderboard!",
+    title: "SRDL Writers & Reader's Hub",
+    description: "Unleash your creativity, write amazing stories, and earn rewards!",
     type: "website",
   },
 };

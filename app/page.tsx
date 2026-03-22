@@ -1,251 +1,241 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Navbar } from "@/components/navbar";
 import {
-  BookOpen,
-  Coins,
-  Trophy,
-  Sparkles,
-  PenLine,
   Users,
+  FileText,
   Star,
+  Coins,
+  BookOpen,
+  Dumbbell,
+  Trophy,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+interface Stats {
+  writers: number;
+  stories: number;
+  words: number;
+  earnings: number;
+}
 
 export default function HomePage() {
+  const [stats, setStats] = useState<Stats>({
+    writers: 0,
+    stories: 0,
+    words: 0,
+    earnings: 0,
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const supabase = createClient();
+      
+      // Get stories count
+      const { count: storiesCount } = await supabase
+        .from("stories")
+        .select("*", { count: "exact", head: true });
+      
+      // Get reviews stats
+      const { data: reviewsData } = await supabase
+        .from("book_reviews")
+        .select("student_name, word_count, earnings_cents");
+      
+      if (reviewsData) {
+        const uniqueWriters = new Set(reviewsData.map(r => r.student_name.toLowerCase().trim())).size;
+        const totalWords = reviewsData.reduce((sum, r) => sum + (r.word_count || 0), 0);
+        const totalEarnings = reviewsData.reduce((sum, r) => sum + (r.earnings_cents || 0), 0);
+        
+        setStats({
+          writers: uniqueWriters + (storiesCount || 0),
+          stories: (storiesCount || 0) + reviewsData.length,
+          words: totalWords,
+          earnings: totalEarnings,
+        });
+      }
+    };
+
+    fetchStats();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-secondary/30">
-      {/* Header */}
-      <header className="container mx-auto flex items-center justify-between px-4 py-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <BookOpen className="h-5 w-5" />
-          </div>
-          <span className="font-display text-xl font-bold">Amabali Champs</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/auth/login">
-            <Button variant="ghost">Sign In</Button>
-          </Link>
-          <Link href="/auth/sign-up">
-            <Button>Get Started</Button>
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-900">
+      <Navbar />
 
       {/* Hero Section */}
-      <section className="container mx-auto px-4 py-16 text-center md:py-24">
-        <div className="mx-auto max-w-3xl space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-            <Sparkles className="h-4 w-4" />
-            The Reading Gym
-          </div>
-          <h1 className="font-display text-4xl font-bold tracking-tight text-balance md:text-5xl lg:text-6xl">
-            Read Books, Write Reviews,{" "}
-            <span className="text-primary">Earn Rewards</span>
+      <section className="relative overflow-hidden bg-gradient-to-b from-slate-800 via-slate-900 to-indigo-950 px-4 py-20 md:py-28">
+        <div className="mx-auto max-w-4xl text-center">
+          <h1 className="font-display text-4xl font-bold tracking-tight text-white md:text-5xl lg:text-6xl">
+            <Sparkles className="mb-2 inline-block h-8 w-8 text-primary md:h-10 md:w-10" />
+            {" "}SRDL{" "}
+            <span className="text-accent">Writers</span>
+            {" & "}
+            <span className="text-primary">Reader&apos;s</span>
+            {" Hub "}
+            <Sparkles className="mb-2 inline-block h-8 w-8 text-primary md:h-10 md:w-10" />
           </h1>
-          <p className="mx-auto max-w-xl text-lg text-muted-foreground text-pretty">
-            Join the Amabali Champs Reading Gym where every word you write earns
-            you money. Share your love of reading and watch your earnings grow!
+          <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-300 md:text-xl">
+            Unleash your creativity, write amazing stories, and earn rewards while improving your skills!
           </p>
-          <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link href="/auth/sign-up">
-              <Button size="lg" className="gap-2">
-                Start Earning Today
+
+          {/* CTA Buttons */}
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Link href="/create-story">
+              <Button size="lg" className="gap-2 bg-accent text-accent-foreground hover:bg-accent/90">
+                Start Writing Now
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Link href="/auth/login">
-              <Button size="lg" variant="outline">
-                Sign In
+            <Link href="/reading-gym">
+              <Button size="lg" variant="outline" className="gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground">
+                <BookOpen className="h-4 w-4" />
+                Reading Gym
+              </Button>
+            </Link>
+            <Link href="/reviews">
+              <Button size="lg" variant="outline" className="gap-2 border-slate-500 text-slate-300 hover:bg-slate-700 hover:text-white">
+                <Trophy className="h-4 w-4" />
+                View Leaderboard
               </Button>
             </Link>
           </div>
         </div>
-      </section>
 
-      {/* How It Works */}
-      <section className="container mx-auto px-4 py-16">
-        <div className="mb-12 text-center">
-          <h2 className="font-display text-3xl font-bold">How It Works</h2>
-          <p className="mt-2 text-muted-foreground">
-            Three simple steps to start earning
-          </p>
-        </div>
-        <div className="mx-auto grid max-w-4xl gap-6 md:grid-cols-3">
-          <Card className="relative overflow-hidden">
-            <div className="absolute -right-2 -top-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-display text-2xl font-bold text-primary">
-              1
-            </div>
-            <CardContent className="pt-8">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
-                <BookOpen className="h-7 w-7 text-primary" />
-              </div>
-              <h3 className="mb-2 font-display text-xl font-semibold">
-                Read a Book
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Pick any book you love - fiction, non-fiction, adventure,
-                mystery, or anything else!
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="relative overflow-hidden">
-            <div className="absolute -right-2 -top-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-display text-2xl font-bold text-primary">
-              2
-            </div>
-            <CardContent className="pt-8">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/10">
-                <PenLine className="h-7 w-7 text-accent" />
-              </div>
-              <h3 className="mb-2 font-display text-xl font-semibold">
-                Write a Review
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Share your thoughts about the book. The more you write, the
-                more you earn!
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="relative overflow-hidden">
-            <div className="absolute -right-2 -top-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-display text-2xl font-bold text-primary">
-              3
-            </div>
-            <CardContent className="pt-8">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-yellow-500/10">
-                <Coins className="h-7 w-7 text-yellow-500" />
-              </div>
-              <h3 className="mb-2 font-display text-xl font-semibold">
-                Earn Rewards
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Get paid for every word! Watch your earnings grow and celebrate
-                with confetti!
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="container mx-auto px-4 py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <Coins className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-display font-semibold">Earn Per Word</h3>
-                <p className="text-sm text-muted-foreground">
-                  Every word counts! Get R0.05 per word you write in your
-                  reviews.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-accent/10">
-                <Trophy className="h-6 w-6 text-accent" />
-              </div>
-              <div>
-                <h3 className="font-display font-semibold">Live Leaderboard</h3>
-                <p className="text-sm text-muted-foreground">
-                  Compete with other readers and see your rank in real-time.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-yellow-500/10">
-                <Star className="h-6 w-6 text-yellow-500" />
-              </div>
-              <div>
-                <h3 className="font-display font-semibold">Rate Books</h3>
-                <p className="text-sm text-muted-foreground">
-                  Share your star ratings to help others find great books.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
-                <Sparkles className="h-6 w-6 text-purple-500" />
-              </div>
-              <div>
-                <h3 className="font-display font-semibold">Celebrate Wins</h3>
-                <p className="text-sm text-muted-foreground">
-                  Enjoy confetti celebrations every time you submit a review!
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
-                <Users className="h-6 w-6 text-blue-500" />
-              </div>
-              <div>
-                <h3 className="font-display font-semibold">Reading Sessions</h3>
-                <p className="text-sm text-muted-foreground">
-                  Join live reading sessions and compete with fellow readers.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-green-500/10">
-                <BookOpen className="h-6 w-6 text-green-500" />
-              </div>
-              <div>
-                <h3 className="font-display font-semibold">Any Book Works</h3>
-                <p className="text-sm text-muted-foreground">
-                  Review any book you want - no restrictions on genres or
-                  titles.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="container mx-auto px-4 py-16">
-        <Card className="mx-auto max-w-3xl overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5">
-          <CardContent className="p-8 text-center md:p-12">
-            <h2 className="font-display text-3xl font-bold">
-              Ready to Start Reading?
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-muted-foreground">
-              Join thousands of readers who are earning rewards while doing what
-              they love. Your next great book is waiting!
+        {/* Stats Cards */}
+        <div className="mx-auto mt-16 grid max-w-5xl grid-cols-2 gap-4 px-4 md:grid-cols-4 md:gap-6">
+          <div className="rounded-2xl bg-indigo-900/50 p-6 text-center backdrop-blur">
+            <Users className="mx-auto h-8 w-8 text-accent" />
+            <p className="mt-3 font-display text-3xl font-bold text-white md:text-4xl">
+              {stats.writers > 0 ? `${stats.writers}+` : "1000+"}
             </p>
-            <Link href="/auth/sign-up">
-              <Button size="lg" className="mt-6 gap-2">
-                Create Free Account
-                <ArrowRight className="h-4 w-4" />
-              </Button>
+            <p className="mt-1 text-sm text-slate-400">Young Writers</p>
+          </div>
+          <div className="rounded-2xl bg-indigo-900/50 p-6 text-center backdrop-blur">
+            <FileText className="mx-auto h-8 w-8 text-accent" />
+            <p className="mt-3 font-display text-3xl font-bold text-white md:text-4xl">
+              {stats.stories > 0 ? `${stats.stories}+` : "5000+"}
+            </p>
+            <p className="mt-1 text-sm text-slate-400">Stories Created</p>
+          </div>
+          <div className="rounded-2xl bg-indigo-900/50 p-6 text-center backdrop-blur">
+            <Star className="mx-auto h-8 w-8 text-accent" />
+            <p className="mt-3 font-display text-3xl font-bold text-white md:text-4xl">
+              {stats.words > 0 ? `${Math.floor(stats.words / 1000)}K+` : "10000+"}
+            </p>
+            <p className="mt-1 text-sm text-slate-400">Words Written</p>
+          </div>
+          <div className="rounded-2xl bg-indigo-900/50 p-6 text-center backdrop-blur">
+            <Coins className="mx-auto h-8 w-8 text-accent" />
+            <p className="mt-3 font-display text-3xl font-bold text-white md:text-4xl">
+              R{stats.earnings > 0 ? Math.floor(stats.earnings / 100) : 500}+
+            </p>
+            <p className="mt-1 text-sm text-slate-400">Earned by Authors</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="bg-slate-900 px-4 py-20">
+        <div className="mx-auto max-w-6xl">
+          <h2 className="mb-12 text-center font-display text-3xl font-bold text-white">
+            What You Can Do
+          </h2>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Link href="/create-story" className="group">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 transition-all hover:border-primary hover:bg-slate-800">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20">
+                  <FileText className="h-7 w-7 text-primary" />
+                </div>
+                <h3 className="mb-2 font-display text-xl font-semibold text-white">Write Stories</h3>
+                <p className="text-sm text-slate-400">
+                  Share your creative stories with the world. No account needed!
+                </p>
+              </div>
             </Link>
-          </CardContent>
-        </Card>
+
+            <Link href="/write-review" className="group">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 transition-all hover:border-accent hover:bg-slate-800">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-accent/20">
+                  <Star className="h-7 w-7 text-accent" />
+                </div>
+                <h3 className="mb-2 font-display text-xl font-semibold text-white">Write Reviews</h3>
+                <p className="text-sm text-slate-400">
+                  Review books and earn R0.05 per word you write!
+                </p>
+              </div>
+            </Link>
+
+            <Link href="/reading-gym" className="group">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 transition-all hover:border-primary hover:bg-slate-800">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/20">
+                  <Dumbbell className="h-7 w-7 text-primary" />
+                </div>
+                <h3 className="mb-2 font-display text-xl font-semibold text-white">Reading Gym</h3>
+                <p className="text-sm text-slate-400">
+                  Join live reading sessions and compete with other readers!
+                </p>
+              </div>
+            </Link>
+
+            <Link href="/stories" className="group">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 transition-all hover:border-primary hover:bg-slate-800">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-purple-500/20">
+                  <BookOpen className="h-7 w-7 text-purple-400" />
+                </div>
+                <h3 className="mb-2 font-display text-xl font-semibold text-white">Read Stories</h3>
+                <p className="text-sm text-slate-400">
+                  Discover amazing stories written by young authors.
+                </p>
+              </div>
+            </Link>
+
+            <Link href="/reviews" className="group">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 transition-all hover:border-accent hover:bg-slate-800">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-yellow-500/20">
+                  <Trophy className="h-7 w-7 text-yellow-400" />
+                </div>
+                <h3 className="mb-2 font-display text-xl font-semibold text-white">Leaderboard</h3>
+                <p className="text-sm text-slate-400">
+                  See top reviewers and their quality scores.
+                </p>
+              </div>
+            </Link>
+
+            <Link href="/volunteer" className="group">
+              <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-6 transition-all hover:border-primary hover:bg-slate-800">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-green-500/20">
+                  <Users className="h-7 w-7 text-green-400" />
+                </div>
+                <h3 className="mb-2 font-display text-xl font-semibold text-white">Volunteer</h3>
+                <p className="text-sm text-slate-400">
+                  Help young writers improve their skills.
+                </p>
+              </div>
+            </Link>
+          </div>
+        </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t bg-muted/30">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                <BookOpen className="h-4 w-4" />
-              </div>
-              <span className="font-display font-semibold">Amabali Champs</span>
+      <footer className="border-t border-slate-800 bg-slate-900 px-4 py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 md:flex-row">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <BookOpen className="h-4 w-4 text-primary-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} Amabali Champs. Making reading
-              rewarding.
-            </p>
+            <span className="font-display font-semibold text-white">
+              <span className="text-primary">Reading</span>
+              <span className="text-accent">Quest</span>
+            </span>
           </div>
+          <p className="text-sm text-slate-500">
+            &copy; {new Date().getFullYear()} SRDL Writers Hub. Making reading and writing rewarding.
+          </p>
         </div>
       </footer>
     </div>
