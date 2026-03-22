@@ -44,7 +44,7 @@ export function RecentReviews({ sessionId, refreshTrigger }: RecentReviewsProps)
     const fetchReviews = async () => {
       const supabase = createClient();
       const { data, error } = await supabase
-        .from("book_reviews")
+        .from("reading_gym_reviews")
         .select("*")
         .eq("session_id", sessionId)
         .order("submitted_at", { ascending: false })
@@ -67,7 +67,7 @@ export function RecentReviews({ sessionId, refreshTrigger }: RecentReviewsProps)
         {
           event: "INSERT",
           schema: "public",
-          table: "book_reviews",
+          table: "reading_gym_reviews",
           filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {

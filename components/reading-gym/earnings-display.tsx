@@ -38,7 +38,7 @@ export function EarningsDisplay({
 
       // Get all-time stats
       const { data: allTimeData } = await supabase
-        .from("book_reviews")
+        .from("reading_gym_reviews")
         .select("earnings_cents, word_count")
         .eq("learner_id", userId);
 
@@ -46,7 +46,7 @@ export function EarningsDisplay({
       let sessionEarnings = 0;
       if (sessionId) {
         const { data: sessionData } = await supabase
-          .from("book_reviews")
+          .from("reading_gym_reviews")
           .select("earnings_cents")
           .eq("learner_id", userId)
           .eq("session_id", sessionId);

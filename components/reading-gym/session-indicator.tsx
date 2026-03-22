@@ -5,11 +5,10 @@ import { Clock, Radio } from "lucide-react";
 
 interface Session {
   id: string;
-  name: string;
-  description?: string;
-  start_time: string;
+  session_name: string;
   end_time?: string;
   is_active: boolean;
+  created_at: string;
 }
 
 interface SessionIndicatorProps {
@@ -49,18 +48,16 @@ export function SessionIndicator({ session }: SessionIndicatorProps) {
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-display font-semibold text-primary">
-            {session.name}
+            {session.session_name}
           </p>
-          {session.description && (
-            <p className="truncate text-sm text-muted-foreground">
-              {session.description}
-            </p>
-          )}
+          <p className="truncate text-sm text-muted-foreground">
+            Active reading session
+          </p>
         </div>
         <div className="text-right text-xs text-muted-foreground">
           <p>Started</p>
           <p className="font-medium">
-            {new Date(session.start_time).toLocaleTimeString([], {
+            {new Date(session.created_at).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             })}

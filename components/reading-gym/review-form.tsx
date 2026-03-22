@@ -77,7 +77,7 @@ export function ReviewForm({
     const supabase = createClient();
 
     try {
-      const { error } = await supabase.from("book_reviews").insert({
+      const { error } = await supabase.from("reading_gym_reviews").insert({
         session_id: sessionId,
         learner_id: userId,
         learner_name: userName,

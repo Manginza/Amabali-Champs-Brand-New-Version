@@ -40,14 +40,35 @@ export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
     const fetchLeaderboard = async () => {
       const supabase = createClient();
       const { data, error } = await supabase
-        .from("leaderboard")
-        .select("*")
+        .from("reading_gym_reviews")
+        .select("learner_id, learner_name, avatar_emoji, word_count, earnings_cents")
         .eq("session_id", sessionId)
-        .order("total_earnings", { ascending: false })
-        .limit(10);
+        .eq("is_approved", true);
 
       if (!error && data) {
-        setEntries(data);
+        // Aggregate by learner
+        const leaderboardMap = new Map<string, LeaderboardEntry>();
+        for (const review of data) {
+          const existing = leaderboardMap.get(review.learner_id);
+          if (existing) {
+            existing.review_count++;
+            existing.total_words += review.word_count;
+            existing.total_earnings += review.earnings_cents;
+          } else {
+            leaderboardMap.set(review.learner_id, {
+              learner_id: review.learner_id,
+              learner_name: review.learner_name,
+              avatar_emoji: review.avatar_emoji,
+              review_count: 1,
+              total_words: review.word_count,
+              total_earnings: review.earnings_cents,
+            });
+          }
+        }
+        const sorted = Array.from(leaderboardMap.values())
+          .sort((a, b) => b.total_earnings - a.total_earnings)
+          .slice(0, 10);
+        setEntries(sorted);
       }
       setIsLoading(false);
     };
@@ -63,7 +84,7 @@ export function Leaderboard({ sessionId, refreshTrigger }: LeaderboardProps) {
         {
           event: "*",
           schema: "public",
-          table: "book_reviews",
+          table: "reading_gym_reviews",
           filter: `session_id=eq.${sessionId}`,
         },
         () => {

@@ -15,11 +15,10 @@ import type { User } from "@supabase/supabase-js";
 
 interface Session {
   id: string;
-  name: string;
-  description?: string;
-  start_time: string;
+  session_name: string;
   end_time?: string;
   is_active: boolean;
+  created_at: string;
 }
 
 interface Profile {
@@ -38,10 +37,10 @@ export default function DashboardPage() {
   const fetchActiveSession = useCallback(async () => {
     const supabase = createClient();
     const { data } = await supabase
-      .from("reading_sessions")
+      .from("reading_gym_sessions")
       .select("*")
       .eq("is_active", true)
-      .order("start_time", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1)
       .single();
 
@@ -85,7 +84,7 @@ export default function DashboardPage() {
         {
           event: "*",
           schema: "public",
-          table: "reading_sessions",
+          table: "reading_gym_sessions",
         },
         () => {
           fetchActiveSession();

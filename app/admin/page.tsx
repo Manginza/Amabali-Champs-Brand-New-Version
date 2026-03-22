@@ -29,9 +29,7 @@ import type { User } from "@supabase/supabase-js";
 
 interface Session {
   id: string;
-  name: string;
-  description?: string;
-  start_time: string;
+  session_name: string;
   end_time?: string;
   is_active: boolean;
   created_at: string;
@@ -49,7 +47,6 @@ export default function AdminPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionStats, setSessionStats] = useState<Record<string, SessionStats>>({});
   const [newSessionName, setNewSessionName] = useState("");
-  const [newSessionDescription, setNewSessionDescription] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const router = useRouter();
@@ -77,7 +74,7 @@ export default function AdminPage() {
   const fetchSessions = async () => {
     const supabase = createClient();
     const { data: sessionsData } = await supabase
-      .from("reading_sessions")
+      .from("reading_gym_sessions")
       .select("*")
       .order("created_at", { ascending: false });
 
@@ -88,7 +85,7 @@ export default function AdminPage() {
       const stats: Record<string, SessionStats> = {};
       for (const session of sessionsData) {
         const { data: reviews } = await supabase
-          .from("book_reviews")
+          .from("reading_gym_reviews")
           .select("learner_id, word_count, earnings_cents")
           .eq("session_id", session.id);
 
@@ -123,15 +120,13 @@ export default function AdminPage() {
     try {
       // First, deactivate any existing active sessions
       await supabase
-        .from("reading_sessions")
+        .from("reading_gym_sessions")
         .update({ is_active: false, end_time: new Date().toISOString() })
         .eq("is_active", true);
 
       // Create new session
-      const { error } = await supabase.from("reading_sessions").insert({
-        name: newSessionName.trim(),
-        description: newSessionDescription.trim() || null,
-        start_time: new Date().toISOString(),
+      const { error } = await supabase.from("reading_gym_sessions").insert({
+        session_name: newSessionName.trim(),
         is_active: true,
         created_by: user.id,
       });
@@ -140,7 +135,6 @@ export default function AdminPage() {
 
       toast.success("Reading session started!");
       setNewSessionName("");
-      setNewSessionDescription("");
       await fetchSessions();
     } catch (error) {
       toast.error(
@@ -158,20 +152,20 @@ export default function AdminPage() {
       if (session.is_active) {
         // End session
         await supabase
-          .from("reading_sessions")
+          .from("reading_gym_sessions")
           .update({ is_active: false, end_time: new Date().toISOString() })
           .eq("id", session.id);
         toast.success("Session ended");
       } else {
         // Deactivate other sessions first
         await supabase
-          .from("reading_sessions")
+          .from("reading_gym_sessions")
           .update({ is_active: false, end_time: new Date().toISOString() })
           .eq("is_active", true);
 
         // Reactivate this session
         await supabase
-          .from("reading_sessions")
+          .from("reading_gym_sessions")
           .update({ is_active: true, end_time: null })
           .eq("id", session.id);
         toast.success("Session reactivated");
@@ -246,18 +240,7 @@ export default function AdminPage() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sessionDescription">
-                    Description (optional)
-                  </Label>
-                  <Textarea
-                    id="sessionDescription"
-                    placeholder="Describe the session..."
-                    value={newSessionDescription}
-                    onChange={(e) => setNewSessionDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
+                
                 <Button
                   type="submit"
                   className="w-full"
@@ -351,7 +334,7 @@ export default function AdminPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <h3 className="font-display font-semibold">
-                              {session.name}
+                              {session.session_name}
                             </h3>
                             {session.is_active && (
                               <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
@@ -359,15 +342,10 @@ export default function AdminPage() {
                               </span>
                             )}
                           </div>
-                          {session.description && (
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {session.description}
-                            </p>
-                          )}
                           <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {new Date(session.start_time).toLocaleDateString()}
+                              {new Date(session.created_at).toLocaleDateString()}
                             </span>
                             <span className="flex items-center gap-1">
                               <Users className="h-3 w-3" />

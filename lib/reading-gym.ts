@@ -31,9 +31,7 @@ export interface LeaderboardEntry {
 
 export interface ReadingSession {
   id: string
-  name: string
-  description: string | null
-  start_time: string
+  session_name: string
   end_time: string | null
   is_active: boolean
   created_by: string | null
@@ -86,7 +84,7 @@ export function getMilestone(wordCount: number) {
 export async function getActiveSession(): Promise<ReadingSession | null> {
   const supabase = createClient()
   const { data, error } = await supabase
-    .from('reading_sessions')
+    .from('reading_gym_sessions')
     .select('*')
     .eq('is_active', true)
     .single()
@@ -98,23 +96,47 @@ export async function getActiveSession(): Promise<ReadingSession | null> {
 export async function getLeaderboard(sessionId: string): Promise<LeaderboardEntry[]> {
   const supabase = createClient()
   const { data, error } = await supabase
-    .from('leaderboard')
-    .select('*')
+    .from('reading_gym_reviews')
+    .select('learner_id, learner_name, avatar_emoji, session_id, word_count, earnings_cents')
     .eq('session_id', sessionId)
-    .order('total_words', { ascending: false })
-    .limit(20)
+    .eq('is_approved', true)
 
   if (error) {
     console.error('Error fetching leaderboard:', error)
     return []
   }
-  return (data || []) as LeaderboardEntry[]
+
+  // Aggregate by learner
+  const leaderboardMap = new Map<string, LeaderboardEntry>()
+  for (const review of data || []) {
+    const existing = leaderboardMap.get(review.learner_id)
+    if (existing) {
+      existing.review_count++
+      existing.total_words += review.word_count
+      existing.total_earnings += review.earnings_cents
+    } else {
+      leaderboardMap.set(review.learner_id, {
+        learner_id: review.learner_id,
+        learner_name: review.learner_name,
+        avatar_emoji: review.avatar_emoji,
+        session_id: review.session_id,
+        review_count: 1,
+        total_words: review.word_count,
+        total_earnings: review.earnings_cents,
+        avg_rating: 0,
+      })
+    }
+  }
+
+  return Array.from(leaderboardMap.values())
+    .sort((a, b) => b.total_words - a.total_words)
+    .slice(0, 20)
 }
 
 export async function getSessionReviews(sessionId: string): Promise<BookReview[]> {
   const supabase = createClient()
   const { data, error } = await supabase
-    .from('book_reviews')
+    .from('reading_gym_reviews')
     .select('*')
     .eq('session_id', sessionId)
     .order('submitted_at', { ascending: false })
@@ -140,7 +162,7 @@ export async function submitReview(review: {
 }): Promise<BookReview> {
   const supabase = createClient()
   const { data, error } = await supabase
-    .from('book_reviews')
+    .from('reading_gym_reviews')
     .insert(review)
     .select()
     .single()
